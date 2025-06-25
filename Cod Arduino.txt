@@ -1,0 +1,158 @@
+#include <LedControl.h>
+
+// Definire pini
+#define PUL_PIN           9   //Pin PUL a driverului motorului
+#define DIR_PIN           8   //Pin DIR a driverului motorului
+#define BUTTON_PIN        3   //Buton start a conveiorului
+#define SENSOR_PIN        4   // Senzorul optic
+#define METAL_SENSOR_PIN  5   // Senzorul de metal
+#define RELAY_OBJ_PIN     7   // Modul releu 1 pentru DI1
+#define RELAY_METAL_PIN   6   // Modul releu 2 pentru DI2
+#define ROBOT_DONE_PIN    2   // Semnal de la robot
+#define BUZZER_PIN        12  // Buzzer
+
+// Initializare Matrice 8x8 LED (Pinii DIN, CLK, CS)
+LedControl lc = LedControl(11, 13, 10, 1);
+
+// Animatie sageata 
+byte arrowFrames[][8] = {
+  {B00001000,B00001100,B00001110,B11111111,B11111111,B00001110,B00001100,B00001000},
+  {B00000100,B00000110,B00000111,B01111111,B01111111,B00000111,B00000110,B00000100},
+  {B00000010,B00000011,B00000011,B00111111,B00111111,B00000011,B00000011,B00000010},
+  {B00000001,B00000001,B00000001,B00011111,B00011111,B00000001,B00000001,B00000001},
+  {B00000000,B00000000,B00000000,B00001111,B00001111,B00000000,B00000000,B00000000},
+  {B00000000,B00000000,B00000000,B00000111,B00000111,B00000000,B00000000,B00000000},
+  {B00000000,B00000000,B00000000,B10000011,B10000011,B00000000,B00000000,B00000000},
+  {B00000000,B00000000,B10000000,B11000001,B11000001,B10000000,B00000000,B00000000},
+  {B00000000,B10000000,B11000000,B11100000,B11100000,B11000000,B10000000,B00000000},
+  {B10000000,B11000000,B11100000,B11110000,B11110000,B11100000,B11000000,B10000000},
+  {B01000000,B01100000,B01110000,B11111000,B11111000,B01110000,B01100000,B01000000},
+  {B00100000,B00110000,B00111000,B11111100,B11111100,B00111000,B00110000,B00100000},
+  {B00010000,B00011000,B00011100,B11111110,B11111110,B00011100,B00011000,B00010000}
+};
+
+const int numFrames = sizeof(arrowFrames) / 8;
+
+// Simbol de pauza
+byte pauseSymbol[8] = {
+  B00000000,B00100100,B00100100,B00100100,
+  B00100100,B00100100,B00100100,B00000000
+};
+
+// Initializare variabile
+int currentFrame = 0;
+bool motorRunning = false;
+bool objectLatched = false;
+bool metalLatched = false;
+unsigned long lastFrameTime = 0;
+unsigned long lastStepTime = 0;
+unsigned long lastObjectClear = 0;
+unsigned long lastMetalClear = 0;
+
+// Intervalele de timp si pasi
+const unsigned long frameInterval = 80;
+const unsigned long stepInterval = 500;
+
+void setup() {
+  pinMode(PUL_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(SENSOR_PIN, INPUT);
+pinMode(METAL_SENSOR_PIN, INPUT);
+  pinMode(RELAY_OBJ_PIN, OUTPUT);
+  pinMode(RELAY_METAL_PIN, OUTPUT);
+  pinMode(ROBOT_DONE_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  digitalWrite(DIR_PIN, HIGH);
+  digitalWrite(RELAY_OBJ_PIN, HIGH);     
+  digitalWrite(RELAY_METAL_PIN, HIGH);   
+  digitalWrite(BUZZER_PIN, LOW);         
+
+  lc.shutdown(0, false);
+  lc.setIntensity(0, 8);
+  lc.clearDisplay(0);
+}
+
+void loop() {
+  // Daca motorul nu e pornit si apasam pe buton, motorul porneste
+  if (!motorRunning && digitalRead(BUTTON_PIN) == LOW) {
+    motorRunning = true;
+    delay(200);
+  }
+  if (!motorRunning) return;
+// Senzorul OPTIC
+  if (digitalRead(SENSOR_PIN) == HIGH) {
+    objectLatched = true;
+    lastObjectClear = millis();
+  } else if (millis() - lastObjectClear > 1000) {
+    objectLatched = false;
+  }
+
+  // Senzorul INDUCTIV
+  if (digitalRead(METAL_SENSOR_PIN) == HIGH) {
+    metalLatched = true;
+    lastMetalClear = millis();
+  } else if (millis() - lastMetalClear > 1000) {
+    metalLatched = false;
+  }
+
+// Verifica daca unul dintre senzori s-a declansat
+  if (objectLatched || metalLatched) {
+    showPause();
+
+    // Activare a modulului de releu
+    digitalWrite(RELAY_OBJ_PIN, objectLatched ? LOW : HIGH);
+    digitalWrite(RELAY_METAL_PIN, metalLatched ? LOW : HIGH);
+
+    // Activare a buzzerului daca senzorul detecteaza metal
+    digitalWrite(BUZZER_PIN, metalLatched ? HIGH : LOW);
+
+    // Asteapta ca robotul sa isi termine actiunea
+    while (digitalRead(ROBOT_DONE_PIN) == LOW) {
+      delay(10);
+    }
+
+    // Reseteaza ambii senzori pe fals dupa realizarea actiunii robotului
+    objectLatched = false;
+    metalLatched = false;
+
+    // Reseteaza ceilalti pini pentru urmatorul obiect de pe conveior
+    digitalWrite(RELAY_OBJ_PIN, HIGH);
+    digitalWrite(RELAY_METAL_PIN, HIGH);
+    digitalWrite(BUZZER_PIN, LOW);
+
+    return;
+  }
+
+// Functie pentru rularea normala a motorului
+  if (micros() - lastStepTime >= stepInterval) {
+    digitalWrite(PUL_PIN, HIGH);
+    delayMicroseconds(20);
+    digitalWrite(PUL_PIN, LOW);
+    lastStepTime = micros();
+  }
+
+  // Functie de apelare a animatii LED cand conveiorul merge normal
+  if (millis() - lastFrameTime >= frameInterval) {
+    showFrame(currentFrame);
+    currentFrame = (currentFrame + 1) % numFrames;
+    lastFrameTime = millis();
+  }
+}
+
+//Functie de afisare a animatii LED
+void showFrame(int frame) {
+  for (int i = 0; i < 8; i++) {
+    lc.setRow(0, i, arrowFrames[frame][i]);
+  }
+}
+
+//Functie de afisare a simbolului de pauza
+void showPause() {
+  for (int i = 0; i < 8; i++) {
+    lc.setRow(0, i, pauseSymbol[i]);
+  }
+}
+
+

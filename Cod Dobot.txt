@@ -1,0 +1,114 @@
+-- Version: Lua 5.3.5
+
+--Pozitiile:
+-- P1 = pozitie deasupra senzorului de metal
+-- P2 = in fata senzorului de metal
+-- P4 = pozitie deasupra senzorului optic
+-- P5 = in fata senzorului optic
+-- P6/P7 = prima anvelopa a senzorului optic
+-- P8/P9 = a doua anvelopa a senzorului optic
+-- P10/P11 = prima anvelopa a senzorului de metal
+
+--Declaram variabilele pentru starea anterioara a senzorilor
+lastDI1 = OFF
+lastDI2 = OFF
+
+--Declaram contoarele pentru anvelopele procesate
+countOpticTires = 0
+countInductivTires = 0
+
+while true do
+  --Citeste starea senzorilor
+  local currentDI1 = DI(1)
+  local currentDI2 = DI(2)
+
+  -- Senzor OPTIC
+  --Verificam daca senzorul a fost activat iar starea anterioara a senzorului a fost dezactivat
+  if currentDI1 == ON and lastDI1 == OFF then
+    DO(1, OFF) -- Oprim conveiorul
+
+    if countOpticTires == 0 then
+      Go(P4)
+      Wait(500)
+      Move(P5)
+      Wait(500)
+      DhClose()
+      Wait(500)
+      Move(P4)
+      Wait(500)
+      Go(P6)
+      Wait(500)
+      Move(P7)
+      Wait(500)
+      DhOpen()
+      Wait(500)
+      Move(P6)
+      Wait(500)
+      Go(InitialPose)
+      Wait(500)
+    elseif countOpticTires == 1 then
+      Go(P4)
+      Wait(500)
+      Move(P5)
+      Wait(500)
+      DhClose()
+      Wait(500)
+      Move(P4)
+      Wait(500)
+      Go(P8)
+      Wait(500)
+      Move(P9)
+      Wait(500)
+      DhOpen()
+      Wait(500)
+      Move(P8)
+      Wait(500)
+      Go(InitialPose)
+      Wait(500)
+    end
+    
+    -- Actualizam contorul si pornim la loc conveiorul
+    countOpticTires = countOpticTires + 1
+    DO(1, ON)
+    Wait(200)
+    DO(1, OFF)
+  end
+
+  -- Senzor INDUCTIV
+  --Verificam daca senzorul a fost activat iar starea anterioara a senzorului a fost dezactivat
+  if currentDI2 == ON and lastDI2 == OFF then
+    DO(1, OFF)
+    if countInductivTires == 0 then
+      Go(P1)
+      Wait(500)
+      Move(P2)
+      Wait(500)
+      DhClose()
+      Wait(500)
+      Move(P1)
+      Wait(500)
+      Go(P10)
+      Wait(500)
+      Move(P11)
+      Wait(500)
+      DhOpen()
+      Wait(500)
+      Move(P10)
+      Wait(500)
+      Go(InitialPose)
+      Wait(500)
+    end
+
+    -- Actualizam contorul si pornim la loc conveiorul
+    countInductivTires = countInductivTires + 1
+    DO(1, ON)
+    Wait(200)
+    DO(1, OFF)
+  end
+
+  -- Salvam starea actuala a senzorilor pentru urmatoarea iteratie
+  lastDI1 = currentDI1
+  lastDI2 = currentDI2
+
+  Sleep(50) 
+end
